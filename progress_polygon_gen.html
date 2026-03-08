@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+     <meta charset="UTF-8">
+     <title>异形进度条拟合工具 - 交互与格式终极版</title>
+     <style>
+          :root {
+               --cursor-cross: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path d='M11 2v9H2v2h9v9h2v-9h9v-2h-9V2h-2z' fill='white' stroke='black' stroke-width='1.5'/></svg>") 12 12, crosshair;
+               --cursor-grabbing: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path d='M18,11V7a2,2,0,0,0-4,0v3h-1V5a2,2,0,0,0-4,0v5h-1V6a2,2,0,0,0-4,0v9a6,6,0,0,0,6,6h4a6,6,0,0,0,6-6V11Z' fill='white' stroke='black' stroke-width='1.5'/></svg>") 12 12, grabbing;
+          }
+
+          body {
+               font-family: sans-serif;
+               display: flex;
+               flex-direction: column;
+               height: 100vh;
+               margin: 0;
+               background: #e0e0e0;
+               overflow: hidden;
+          }
+
+          body.is-panning,
+          body.is-panning * {
+               cursor: var(--cursor-grabbing) !important;
+          }
+
+          #toolbar {
+               background: #2c3e50;
+               color: white;
+               padding: 12px 20px;
+               display: flex;
+               gap: 15px;
+               align-items: center;
+               z-index: 100;
+               box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+          }
+
+          #main-container {
+               display: flex;
+               flex: 1;
+               overflow: hidden;
+          }
+
+          #canvas-wrapper {
+               flex: 1;
+               position: relative;
+               overflow: hidden;
+               background-color: #ffffff;
+               background-image:
+                    linear-gradient(45deg, #eee 25%, transparent 25%),
+                    linear-gradient(-45deg, #eee 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, #eee 75%),
+                    linear-gradient(-45deg, transparent 75%, #eee 75%);
+               background-size: 20px 20px;
+               background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+               cursor: var(--cursor-cross);
+          }
+
+          canvas {
+               display: block;
+          }
+
+          #sidebar {
+               width: 450px;
+               background: white;
+               border-left: 1px solid #ccc;
+               display: flex;
+               flex-direction: column;
+               z-index: 101;
+          }
+
+          .side-section {
+               padding: 8px 10px;
+               border-bottom: 1px solid #eee;
+               font-size: 12px;
+          }
+
+          .auto-box {
+               background: #fffbe6;
+               border-bottom: 1px solid #ffe58f;
+               display: flex;
+               align-items: center;
+               gap: 5px;
+               color: #856404;
+          }
+
+          .preview-box {
+               background: #f0f5ff;
+               border-bottom: 1px solid #adc6ff;
+               display: flex;
+               align-items: center;
+               gap: 10px;
+               color: #1d39c4;
+          }
+
+          .table-header {
+               display: grid;
+               grid-template-columns: 40px 80px 1fr 1fr 60px;
+               background: #f8f9fa;
+               padding: 10px;
+               font-weight: bold;
+               border-bottom: 1px solid #ddd;
+          }
+
+          #point-list {
+               flex: 1;
+               overflow-y: auto;
+          }
+
+          .point-row {
+               display: grid;
+               grid-template-columns: 40px 80px 1fr 1fr 60px;
+               padding: 6px 10px;
+               border-bottom: 1px solid #eee;
+               align-items: center;
+          }
+
+          .point-row input {
+               width: 85%;
+               padding: 4px;
+               border: 1px solid #ccc;
+               font-size: 11px;
+          }
+
+          .point-row input[readonly] {
+               background-color: #f5f5f5;
+               color: #555;
+               border-color: #d9d9d9;
+               cursor: not-allowed;
+          }
+
+          .radio-group {
+               display: flex;
+               gap: 10px;
+               background: rgba(255, 255, 255, 0.1);
+               padding: 5px 12px;
+               border-radius: 4px;
+          }
+
+          #output-str {
+               width: 100%;
+               height: 60px;
+               font-size: 11px;
+               margin-top: 5px;
+               resize: none;
+               border: 1px solid #ddd;
+          }
+
+          #context-menu {
+               position: fixed;
+               display: none;
+               background: white;
+               border: 1px solid #ccc;
+               box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+               z-index: 1000;
+               min-width: 120px;
+               padding: 5px 0;
+               border-radius: 4px;
+          }
+
+          .menu-item {
+               padding: 8px 15px;
+               cursor: pointer;
+               font-size: 13px;
+               color: #333;
+          }
+
+          .menu-item:hover {
+               background: #1890ff;
+               color: white;
+          }
+
+          .btn-del {
+               color: #ff4d4f;
+               cursor: pointer;
+               border: none;
+               background: none;
+               font-weight: bold;
+               font-size: 12px;
+          }
+
+          .action-btns {
+               display: flex;
+               gap: 10px;
+               margin-top: 5px;
+          }
+
+          button.primary {
+               background: #1890ff;
+               color: white;
+               border: none;
+               padding: 4px 12px;
+               border-radius: 2px;
+               cursor: pointer;
+          }
+          button.primary:hover { background: #40a9ff; }
+     </style>
+</head>
+
+<body>
+
+     <div id="toolbar">
+          <input type="file" id="upload" accept="image/*">
+          <div style="font-size: 13px">透明度 <input type="range" id="opacity-slider" min="0" max="1" step="0.05" value="1"
+                    style="width:70px"></div>
+          <div style="font-size: 13px">连线 <input type="color" id="line-color" value="#666666"></div>
+          <div class="radio-group">
+               <label><input type="radio" name="mode" value="red" checked> <span style="color:#ff4d4f">🔴 红线</span></label>
+               <label><input type="radio" name="mode" value="blue"> <span style="color:#1890ff">🔵 蓝线</span></label>
+          </div>
+          <button onclick="exportData()" style="cursor: pointer">导出数据</button>
+          <div style="font-size: 11px; color: #bdc3c7; margin-left: auto;">滚轮缩放 | 中键平移 | 右键操作 | Ctrl+Z/Y 撤回重做</div>
+     </div>
+
+     <div id="main-container">
+          <div id="canvas-wrapper"><canvas id="canvas"></canvas></div>
+          <div id="sidebar">
+               <div class="side-section auto-box">
+                    <input type="checkbox" id="auto-value-check">
+                    <label for="auto-value-check">Auto Value</label>
+                    <span style="margin-left:5px">基于:</span>
+                    <select id="auto-value-source" style="font-size: 11px;">
+                        <option value="red">红线</option>
+                        <option value="blue">蓝线</option>
+                    </select>
+               </div>
+               
+               <div class="side-section preview-box">
+                    <input type="checkbox" id="preview-mode-check">
+                    <label for="preview-mode-check">预览模式</label>
+                    <input type="range" id="preview-slider" min="0" max="1" step="0.001" value="0.5" style="flex:1">
+                    <span id="preview-val-label" style="width:35px">0.5</span>
+               </div>
+
+               <div class="table-header"><span>ID</span><span>Value</span><span>红XY</span><span>蓝XY</span><span>删</span></div>
+               <div id="point-list"></div>
+               
+               <div style="padding:10px; border-top:1px solid #eee;">
+                    <div class="action-btns">
+                         <button class="primary" onclick="exportData()">生成导出串</button>
+                         <button class="primary" style="background:#52c41a" onclick="importData()">导入导出串</button>
+                    </div>
+                    <textarea id="output-str" placeholder="在此粘贴 (value1,rx1,ry1,bx1,by1)(...) 格式字符串进行导入..."></textarea>
+               </div>
+          </div>
+     </div>
+
+     <div id="context-menu"></div>
+
+     <script>
+          const canvas = document.getElementById('canvas');
+          const ctx = canvas.getContext('2d');
+          const wrapper = document.getElementById('canvas-wrapper');
+          const pointList = document.getElementById('point-list');
+          const menu = document.getElementById('context-menu');
+          const opacitySlider = document.getElementById('opacity-slider');
+          const lineColorPicker = document.getElementById('line-color');
+          const autoValueCheck = document.getElementById('auto-value-check');
+          const autoValueSource = document.getElementById('auto-value-source');
+          const previewModeCheck = document.getElementById('preview-mode-check');
+          const previewSlider = document.getElementById('preview-slider');
+          const previewLabel = document.getElementById('preview-val-label');
+
+          let img = new Image();
+          let redPath = [], bluePath = [];
+          let scale = 1, offsetX = 0, offsetY = 0;
+          let isDraggingPoint = false, dragTarget = null;
+          let isPanning = false, lastMousePos = { x: 0, y: 0 };
+
+          // --- 撤销/重做系统 ---
+          let history = [];
+          let historyIndex = -1;
+
+          function saveState() {
+               const currentState = JSON.stringify({ red: redPath, blue: bluePath });
+               if (historyIndex >= 0 && history[historyIndex] === currentState) return;
+               if (historyIndex < history.length - 1) history = history.slice(0, historyIndex + 1);
+               history.push(currentState);
+               if (history.length > 50) history.shift(); else historyIndex++;
+          }
+
+          function undo() {
+               if (historyIndex > 0) {
+                    historyIndex--;
+                    const state = JSON.parse(history[historyIndex]);
+                    redPath = state.red; bluePath = state.blue;
+                    updateUI();
+               }
+          }
+
+          function redo() {
+               if (historyIndex < history.length - 1) {
+                    historyIndex++;
+                    const state = JSON.parse(history[historyIndex]);
+                    redPath = state.red; bluePath = state.blue;
+                    updateUI();
+               }
+          }
+
+          saveState();
+
+          window.addEventListener('keydown', (e) => {
+               if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+               else if (e.ctrlKey && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+          });
+
+          function resizeCanvas() { canvas.width = wrapper.clientWidth; canvas.height = wrapper.clientHeight; draw(); }
+          window.onresize = resizeCanvas; resizeCanvas();
+
+          upload.onchange = (e) => {
+               const file = e.target.files[0];
+               if (!file) return;
+               const reader = new FileReader();
+               reader.onload = (ev) => {
+                    img.onload = () => {
+                         scale = Math.min(wrapper.clientWidth / img.width, wrapper.clientHeight / img.height, 0.9);
+                         offsetX = (wrapper.clientWidth - img.width * scale) / 2;
+                         offsetY = (wrapper.clientHeight - img.height * scale) / 2;
+                         draw();
+                    };
+                    img.src = ev.target.result;
+               };
+               reader.readAsDataURL(file);
+          };
+
+          function screenToImage(x, y) { return { x: ((x - offsetX) / scale) / img.width, y: ((y - offsetY) / scale) / img.height }; }
+          function imageToScreen(px, py) { return { x: px * img.width * scale + offsetX, y: py * img.height * scale + offsetY }; }
+
+          // --- 导入功能 ---
+          window.importData = () => {
+              // 1. 获取文本框内容并去除首尾空格
+              let str = document.getElementById('output-str').value.trim();
+          
+              // 2. 兼容处理：如果字符串包含 polygon=" 或结尾引号，将其清洗掉
+              str = str.replace(/^polygon="/, "").replace(/"$/, "");
+          
+              if (!str) {
+                  alert("导入失败：文本框为空！");
+                  return;
+              }
+          
+              // 3. 正则匹配：查找所有被括号包裹的内容 (...)
+              const regex = /\(([^)]+)\)/g;
+              let match;
+              const newRed = [];
+              const newBlue = [];
+          
+              // 4. 循环解析每一个坐标组
+              while ((match = regex.exec(str)) !== null) {
+                  // match[1] 拿到的是括号内部的字符串，例如 "0,0.1,0.2,0.3,0.4"
+                  const parts = match[1].split(',').map(Number);
+          
+                  // 确保一组数据里有 5 个值 (Value, RedX, RedY, BlueX, BlueY)
+                  if (parts.length === 5) {
+                      newRed.push({
+                          value: parts[0],
+                          x: parts[1].toFixed(4),
+                          y: parts[2].toFixed(4)
+                      });
+                      newBlue.push({
+                          x: parts[3].toFixed(4),
+                          y: parts[4].toFixed(4)
+                      });
+                  }
+              }
+          
+              // 5. 如果解析到了有效数据，则更新全局变量并刷新 UI
+              if (newRed.length > 0) {
+                  redPath = newRed;
+                  bluePath = newBlue;
+                  
+                  // 刷新列表和画布
+                  updateUI();
+                  // 保存到撤销/重做历史
+                  if (typeof saveState === 'function') saveState(); 
+                  
+                  alert(`成功导入 ${newRed.length} 个点位`);
+              } else {
+                  alert("导入失败：未发现有效的坐标格式 (Value,RX,RY,BX,BY)");
+              }
+          };
+
+          // --- 预览裁剪计算 ---
+          function getInterpolatedPoint(path, t) {
+               if (path.length === 0) return null;
+               if (t <= Number(redPath[0].value)) return path[0];
+               if (t >= Number(redPath[redPath.length - 1].value)) return path[path.length - 1];
+
+               for (let i = 0; i < redPath.length - 1; i++) {
+                    const v1 = Number(redPath[i].value);
+                    const v2 = Number(redPath[i+1].value);
+                    if (t >= v1 && t <= v2) {
+                         const ratio = (t - v1) / (v2 - v1 || 1);
+                         return {
+                              x: Number(path[i].x) + (Number(path[i+1].x) - Number(path[i].x)) * ratio,
+                              y: Number(path[i].y) + (Number(path[i+1].y) - Number(path[i].y)) * ratio
+                         };
+                    }
+               }
+               return path[path.length - 1];
+          }
+
+          function recalculateAutoValues() {
+               if (!autoValueCheck.checked || redPath.length === 0) return;
+               const useBlue = autoValueSource.value === 'blue';
+               const calcPath = useBlue ? bluePath : redPath;
+               const len = calcPath.length;
+               if (len <= 1) { redPath.forEach(p => p.value = 0); return; }
+               let totalLen = 0, lengths = [0];
+               for (let i = 1; i < len; i++) {
+                    totalLen += Math.hypot(calcPath[i].x - calcPath[i - 1].x, calcPath[i].y - calcPath[i - 1].y);
+                    lengths.push(totalLen);
+               }
+               redPath.forEach((p, i) => {
+                    if (i === 0) p.value = 0;
+                    else if (i >= len - 1) p.value = 1;
+                    else p.value = totalLen === 0 ? 0 : (lengths[i] / totalLen).toFixed(3);
+               });
+          }
+
+          // --- 画布操作 ---
+          wrapper.addEventListener('wheel', (e) => {
+               e.preventDefault();
+               const factor = e.deltaY > 0 ? 0.9 : 1.1;
+               const rect = wrapper.getBoundingClientRect();
+               const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+               const wx = (mx - offsetX) / scale, wy = (my - offsetY) / scale;
+               scale *= factor; offsetX = mx - wx * scale; offsetY = my - wy * scale;
+               draw();
+          }, { passive: false });
+
+          wrapper.addEventListener('mousedown', (e) => {
+               if (!img.src || e.button === 2) return;
+               const rect = wrapper.getBoundingClientRect();
+               const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+               if (e.button === 1) {
+                    isPanning = true; lastMousePos = { x: mx, y: my };
+                    document.body.classList.add('is-panning'); return;
+               }
+               const hit = checkHit(mx, my);
+               if (hit) { isDraggingPoint = true; dragTarget = hit; }
+               else if (e.button === 0) {
+                    const coord = screenToImage(mx, my);
+                    const mode = document.querySelector('input[name="mode"]:checked').value;
+                    if (mode === 'red') redPath.push({ x: coord.x.toFixed(4), y: coord.y.toFixed(4), value: '' });
+                    else bluePath.push({ x: coord.x.toFixed(4), y: coord.y.toFixed(4) });
+                    if (autoValueCheck.checked) recalculateAutoValues();
+                    updateUI(); saveState();
+               }
+          });
+
+          window.addEventListener('mousemove', (e) => {
+               const rect = wrapper.getBoundingClientRect();
+               const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+               if (isPanning) {
+                    offsetX += (mx - lastMousePos.x); offsetY += (my - lastMousePos.y);
+                    lastMousePos = { x: mx, y: my }; draw();
+               } else if (isDraggingPoint) {
+                    const coord = screenToImage(mx, my);
+                    const list = dragTarget.type === 'red' ? redPath : bluePath;
+                    list[dragTarget.index].x = coord.x.toFixed(4);
+                    list[dragTarget.index].y = coord.y.toFixed(4);
+                    if (autoValueCheck.checked) recalculateAutoValues();
+                    draw(); syncInputs(dragTarget.index);
+               } else {
+                    const hit = checkHit(mx, my) || checkLineHit(mx, my);
+                    wrapper.style.cursor = hit ? 'pointer' : '';
+               }
+          });
+
+          window.addEventListener('mouseup', () => {
+               if (isPanning) { isPanning = false; document.body.classList.remove('is-panning'); }
+               if (isDraggingPoint) { isDraggingPoint = false; saveState(); }
+          });
+
+          wrapper.addEventListener('contextmenu', (e) => {
+               e.preventDefault(); if (!img.src) return;
+               const rect = wrapper.getBoundingClientRect();
+               const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+               menu.innerHTML = '';
+               const hitPoint = checkHit(mx, my);
+               const hitLine = checkLineHit(mx, my);
+               if (hitPoint) {
+                    addItem('删除该点', () => { deletePoint(hitPoint.index, hitPoint.type); hideMenu(); });
+               } else if (hitLine) {
+                    addItem(`在${hitLine.type === 'red' ? '红' : '蓝'}线插入点`, () => {
+                         const imgCoord = screenToImage(mx, my);
+                         const list = hitLine.type === 'red' ? redPath : bluePath;
+                         const newPoint = { x: imgCoord.x.toFixed(4), y: imgCoord.y.toFixed(4) };
+                         if (hitLine.type === 'red') newPoint.value = '';
+                         list.splice(hitLine.insertIndex, 0, newPoint);
+                         if (autoValueCheck.checked) recalculateAutoValues();
+                         updateUI(); saveState(); hideMenu();
+                    });
+               }
+               if (menu.innerHTML) { menu.style.display = 'block'; menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px'; }
+          });
+
+          function addItem(text, cb) { const div = document.createElement('div'); div.className = 'menu-item'; div.innerText = text; div.onclick = cb; menu.appendChild(div); }
+          function hideMenu() { menu.style.display = 'none'; }
+          window.onclick = hideMenu;
+
+          function checkLineHit(mx, my) {
+               const threshold = 5;
+               const paths = [{ list: redPath, type: 'red' }, { list: bluePath, type: 'blue' }];
+               for (let p of paths) {
+                    for (let i = 0; i < p.list.length - 1; i++) {
+                         const p1 = imageToScreen(p.list[i].x, p.list[i].y), p2 = imageToScreen(p.list[i + 1].x, p.list[i + 1].y);
+                         const l2 = Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2);
+                         if (l2 == 0) continue;
+                         let t = ((mx - p1.x) * (p2.x - p1.x) + (my - p1.y) * (p2.y - p1.y)) / l2;
+                         t = Math.max(0, Math.min(1, t));
+                         const dist = Math.hypot(mx - (p1.x + t * (p2.x - p1.x)), my - (p1.y + t * (p2.y - p1.y)));
+                         if (dist < threshold) return { type: p.type, insertIndex: i + 1 };
+                    }
+               }
+               return null;
+          }
+
+          function checkHit(mx, my) {
+               const hitR = 10;
+               for (let i = 0; i < redPath.length; i++) { const s = imageToScreen(redPath[i].x, redPath[i].y); if (Math.hypot(s.x - mx, s.y - my) < hitR) return { type: 'red', index: i }; }
+               for (let i = 0; i < bluePath.length; i++) { const s = imageToScreen(bluePath[i].x, bluePath[i].y); if (Math.hypot(s.x - mx, s.y - my) < hitR) return { type: 'blue', index: i }; }
+               return null;
+          }
+
+          function draw() {
+               if (!img.src) return;
+               ctx.clearRect(0, 0, canvas.width, canvas.height);
+               
+               ctx.save();
+               // 如果开启预览模式，进行裁剪
+               if (previewModeCheck.checked && redPath.length > 1 && bluePath.length > 1) {
+                    const t = parseFloat(previewSlider.value);
+                    const redEnd = getInterpolatedPoint(redPath, t);
+                    const blueEnd = getInterpolatedPoint(bluePath, t);
+
+                    ctx.beginPath();
+                    // 顺着画红线
+                    for (let i = 0; i < redPath.length; i++) {
+                         const p = imageToScreen(redPath[i].x, redPath[i].y);
+                         if (i === 0) ctx.moveTo(p.x, p.y);
+                         else ctx.lineTo(p.x, p.y);
+                         if (Number(redPath[i].value) >= t) break;
+                    }
+                    const sRedEnd = imageToScreen(redEnd.x, redEnd.y);
+                    const sBlueEnd = imageToScreen(blueEnd.x, blueEnd.y);
+                    ctx.lineTo(sRedEnd.x, sRedEnd.y);
+                    ctx.lineTo(sBlueEnd.x, sBlueEnd.y);
+                    // 逆着画蓝线返回
+                    for (let i = bluePath.length - 1; i >= 0; i--) {
+                         if (Number(redPath[i].value) > t) continue;
+                         const p = imageToScreen(bluePath[i].x, bluePath[i].y);
+                         ctx.lineTo(p.x, p.y);
+                    }
+                    ctx.closePath();
+                    ctx.clip();
+               }
+
+               ctx.globalAlpha = opacitySlider.value;
+               ctx.translate(offsetX, offsetY);
+               ctx.scale(scale, scale);
+               ctx.drawImage(img, 0, 0);
+               ctx.restore();
+
+               if (!previewModeCheck.checked) {
+                    const minLen = Math.min(redPath.length, bluePath.length);
+                    ctx.setLineDash([5, 5]); ctx.strokeStyle = lineColorPicker.value;
+                    for (let i = 0; i < minLen; i++) { 
+                         const p1 = imageToScreen(redPath[i].x, redPath[i].y), p2 = imageToScreen(bluePath[i].x, bluePath[i].y); 
+                         ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); 
+                    }
+                    ctx.setLineDash([]); drawPath(redPath, '#ff4d4f', 'R'); drawPath(bluePath, '#1890ff', 'B');
+               }
+          }
+
+          function drawPath(path, color, label) {
+               if (!path.length) return;
+               ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+               path.forEach((p, i) => { const s = imageToScreen(p.x, p.y); if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y); ctx.fillRect(s.x - 4, s.y - 4, 8, 8); ctx.font = "10px Arial"; ctx.fillText(label + i, s.x + 10, s.y - 10); });
+               ctx.stroke();
+          }
+
+          function updateUI() {
+               pointList.innerHTML = '';
+               const maxLen = Math.max(redPath.length, bluePath.length);
+               const isAuto = autoValueCheck.checked;
+               for (let i = 0; i < maxLen; i++) {
+                    const row = document.createElement('div'); row.className = 'point-row';
+                    const rP = redPath[i] || { x: '', y: '', value: '' }, bP = bluePath[i] || { x: '', y: '' };
+                    let vInput = `<input type="text" id="v-${i}" value="${rP.value}" ${(isAuto && redPath[i])?'readonly':(!redPath[i]?'disabled':'oninput="manualSync('+i+',\'v\',this.value)"')}>`;
+                    row.innerHTML = `<span>${i}</span>${vInput}<input type="text" id="r-${i}" value="${rP.x},${rP.y}" oninput="manualSync(${i},'r',this.value)"><input type="text" id="b-${i}" value="${bP.x},${bP.y}" oninput="manualSync(${i},'b',this.value)"><button class="btn-del" onclick="deletePoint(${i})">×</button>`;
+                    pointList.appendChild(row);
+               }
+               draw();
+          }
+
+          function syncInputs(i) {
+               if (redPath[i]) {
+                    document.getElementById(`r-${i}`).value = `${redPath[i].x},${redPath[i].y}`;
+                    if (autoValueCheck.checked) redPath.forEach((p, idx) => { if (document.getElementById(`v-${idx}`)) document.getElementById(`v-${idx}`).value = p.value; });
+               }
+               if (bluePath[i]) document.getElementById(`b-${i}`).value = `${bluePath[i].x},${bluePath[i].y}`;
+          }
+
+          window.manualSync = (i, t, v) => {
+               if (t === 'v') { if (redPath[i]) redPath[i].value = v; }
+               else { const p = v.split(',').map(Number); if (p.length === 2) { const target = (t === 'r' ? redPath[i] : bluePath[i]); if (target) { target.x = p[0].toFixed(4); target.y = p[1].toFixed(4); } } }
+               if (autoValueCheck.checked) recalculateAutoValues();
+               updateUI(); saveState();
+          };
+
+          window.deletePoint = (i, type) => {
+               if (type) (type === 'red' ? redPath : bluePath).splice(i, 1);
+               else { if (redPath[i]) redPath.splice(i, 1); if (bluePath[i]) bluePath.splice(i, 1); }
+               if (autoValueCheck.checked) recalculateAutoValues();
+               updateUI(); saveState();
+          };
+
+          autoValueCheck.onchange = () => { if (autoValueCheck.checked) recalculateAutoValues(); updateUI(); saveState(); };
+          autoValueSource.onchange = () => { if (autoValueCheck.checked) recalculateAutoValues(); updateUI(); saveState(); };
+          
+          previewModeCheck.onchange = draw;
+          previewSlider.oninput = () => { previewLabel.innerText = previewSlider.value; draw(); };
+
+          window.exportData = () => {
+               if (!img.src) return;
+               const len = Math.min(redPath.length, bluePath.length);
+               const points = redPath.slice(0, len).map((p, i) => `(${p.value},${p.x},${p.y},${bluePath[i].x},${bluePath[i].y})`).join('');
+               document.getElementById('output-str').value = points;
+          };
+
+          opacitySlider.oninput = draw; lineColorPicker.oninput = draw;
+     </script>
+</body>
+
+</html>
