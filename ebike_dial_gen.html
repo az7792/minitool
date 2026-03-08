@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>全功能 Canvas 设计器 - Orbitron 科技风</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { background-color: #1a1a1a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; }
+        .controls { 
+            background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 16px; margin: 20px; 
+            display: grid; grid-template-columns: auto 100px auto 100px; gap: 10px 15px; align-items: center; 
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3); font-size: 13px;
+        }
+        .group-title { grid-column: span 4; font-weight: bold; border-bottom: 1px solid #444; margin-top: 5px; color: #7aea94; padding-bottom: 5px; }
+        .full-width { grid-column: span 4; }
+        .flex { display: flex; gap: 15px; }
+        input[type="number"], input[type="range"], select { width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #444; background: #222; color: white; }
+        button { background-color: #7aea94; color: #1a1a1a; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
+        button:hover { background-color: #9ef0b3; }
+        canvas { border: 1px solid #333; background-color: #000; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <div class="group-title">字体与特效</div>
+        <label>选择字体:</label>
+        <select id="fontFamily">
+            <option value="'Orbitron', sans-serif">Orbitron (科技风)</option>
+            <option value="Arial">Arial</option>
+            <option value="'Courier New'">Courier New</option>
+            <option value="Impact">Impact</option>
+        </select>
+        <label>文字发光:</label>
+        <input type="range" id="textGlow" min="0" max="15" step="1" value="0">
+        
+        <label>字号(px):</label><input type="number" id="fontSize" value="16">
+        <label>文字颜色:</label><input type="color" id="textColor" value="#ffffff">
+
+        <div class="group-title">色彩与透明度</div>
+        <label>弧线颜色:</label><input type="color" id="arcColor" value="#7aea94">
+        <label>渐变始:</label><input type="color" id="gradStart" value="#76d68b">
+        <label>渐变终:</label><input type="color" id="gradEnd" value="#49845d">
+        <label>弧线透明:</label><div class="full-width"><input type="range" id="opacity" min="0" max="1" step="0.05" value="1"></div>
+
+        <div class="group-title">数值与布局</div>
+        <label>起始/终点:</label>
+        <div style="display: flex; gap: 5px;">
+            <input type="number" id="valStart" value="0">
+            <input type="number" id="valEnd" value="100">
+        </div>
+        <label>步长/半径:</label>
+        <div style="display: flex; gap: 5px;">
+            <input type="number" id="valStep" value="20">
+            <input type="number" id="textRadius" value="150">
+        </div>
+        <label>遮罩宽/高:</label>
+        <div style="display: flex; gap: 5px;">
+            <input type="number" id="maskW" value="34">
+            <input type="number" id="maskH" value="22">
+        </div>
+        
+        <div class="full-width flex">
+            <span><input type="checkbox" id="syncWidth"> <label for="syncWidth">外圈3px</label></span>
+            <span><input type="checkbox" id="hideEnds" checked> <label for="hideEnds">隐藏首尾</label></span>
+        </div>
+
+        <div class="full-width">
+            <button id="downloadBtn">导出透明 PNG</button>
+        </div>
+    </div>
+
+    <canvas id="myCanvas" width="400" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById('myCanvas');
+        const ctx = canvas.getContext('2d');
+        const centerX = 200;
+        const centerY = 200;
+
+        const ids = ['arcColor','textColor','gradStart','gradEnd','opacity','valStart','valEnd','valStep','fontSize','fontFamily','textGlow','textRadius','maskW','maskH','syncWidth','hideEnds'];
+        const els = {};
+        ids.forEach(id => els[id] = document.getElementById(id));
+
+        function draw() {
+            const vStart = parseFloat(els.valStart.value);
+            const vEnd = parseFloat(els.valEnd.value);
+            const vStep = parseFloat(els.valStep.value);
+            const tRadius = parseFloat(els.textRadius.value);
+            const fSize = parseFloat(els.fontSize.value);
+            const fFamily = els.fontFamily.value;
+            const glow = parseFloat(els.textGlow.value);
+            const mW = parseFloat(els.maskW.value);
+            const mH = parseFloat(els.maskH.value);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. 绘制底层渐变
+            ctx.save();
+            ctx.beginPath(); ctx.rect(0, 0, 400, 200); ctx.clip();
+            const grad = ctx.createRadialGradient(centerX, centerY, 100, centerX, centerY, 200);
+            grad.addColorStop(0, els.gradStart.value);
+            grad.addColorStop(1, els.gradEnd.value);
+            ctx.beginPath(); ctx.arc(centerX, centerY, 200, 0, Math.PI*2); ctx.arc(centerX, centerY, 100, 0, Math.PI*2, true);
+            ctx.fillStyle = grad; ctx.fill();
+            ctx.restore();
+
+            // 2. 准备数据
+            const points = [];
+            if (vStep > 0 && vEnd >= vStart) {
+                const count = Math.floor((vEnd - vStart) / vStep) + 1;
+                for (let i = 0; i < count; i++) {
+                    if (els.hideEnds.checked && (i === 0 || i === count - 1)) continue;
+                    const val = vStart + i * vStep;
+                    const angle = Math.PI - (i * (Math.PI / (count - 1)));
+                    points.push({ val, angle });
+                }
+            }
+
+            // 3. 绘制圆弧 + 镂空 (使用 Even-Odd 规则确保渐变不被裁剪)
+            ctx.save();
+            ctx.beginPath(); ctx.rect(0, 0, 400, 200); ctx.clip();
+            ctx.beginPath();
+            ctx.rect(0, 0, 400, 200);
+            points.forEach(p => {
+                ctx.save();
+                ctx.translate(centerX + Math.cos(p.angle)*tRadius, centerY - Math.sin(p.angle)*tRadius);
+                ctx.rotate(-p.angle + Math.PI/2);
+                ctx.rect(-mW/2, -mH/2, mW, mH); 
+                ctx.restore();
+            });
+            ctx.clip("evenodd");
+
+            ctx.globalAlpha = els.opacity.value;
+            ctx.strokeStyle = els.arcColor.value;
+            const outW = els.syncWidth.checked ? 3 : 6;
+            ctx.lineWidth = outW;
+            ctx.beginPath(); ctx.arc(centerX, centerY, 200 - outW/2, Math.PI, 0); ctx.stroke();
+            ctx.lineWidth = 3;
+            for (let r = 187; r > 100; r -= 10) {
+                ctx.beginPath(); ctx.arc(centerX, centerY, r, Math.PI, 0); ctx.stroke();
+            }
+            ctx.restore();
+
+            // 4. 绘制文字 (带外发光选项)
+            ctx.save();
+            ctx.fillStyle = els.textColor.value;
+            ctx.font = `700 ${fSize}px ${fFamily}`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            if(glow > 0) {
+                ctx.shadowColor = els.textColor.value;
+                ctx.shadowBlur = glow;
+            }
+            points.forEach(p => {
+                ctx.save();
+                ctx.translate(centerX + Math.cos(p.angle)*tRadius, centerY - Math.sin(p.angle)*tRadius);
+                ctx.rotate(-p.angle + Math.PI/2);
+                ctx.fillText(p.val, 0, 0);
+                ctx.restore();
+            });
+            ctx.restore();
+        }
+
+        // 监听所有输入
+        document.querySelectorAll('input, select').forEach(el => {
+            el.addEventListener('input', draw);
+        });
+
+        document.getElementById('downloadBtn').onclick = () => {
+            const link = document.createElement('a');
+            link.download = 'orbitron-gauge.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        };
+
+        // 字体加载可能需要时间，稍延迟初始重绘
+        window.onload = () => setTimeout(draw, 300);
+    </script>
+</body>
+</html>
